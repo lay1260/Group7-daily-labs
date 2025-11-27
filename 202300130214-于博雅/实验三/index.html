@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电子表格可视化实践 - 多图表联动分析</title>
+    <!-- 导入官方库（保持版本一致，调整CDN顺序） -->
+    <script src="https://d3js.org/d3.v6.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/x-data-spreadsheet@1.1.5/dist/xspreadsheet.css" />
+    <script src="https://unpkg.com/x-data-spreadsheet@1.1.5/dist/xspreadsheet.js"></script>
+    <script src="https://unpkg.com/x-data-spreadsheet@1.1.9/dist/locale/zh-cn.js"></script>
+    
+    <style>
+        /* 全局样式优化：统一字体、增加页面间距 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', 'Helvetica', sans-serif;
+        }
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        /* 标题样式：增加视觉层级 */
+        .page-title {
+            font-size: 24px;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+        /* 容器布局：采用弹性盒，优化响应式 */
+        .content-container {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+        /* 表格容器美化：增加阴影、圆角 */
+        #xspreadsheet {
+            width: 420px;
+            height: 520px;
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            flex-shrink: 0;
+        }
+        /* 可视化容器优化：增加内边距、阴影 */
+        #my_dataviz {
+            flex: 1;
+            min-width: 800px;
+            height: 900px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+        /* 图表控件区域美化：调整配色、增加间距 */
+        .chart-controls {
+            margin-bottom: 18px;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            background-color: #f5f7fa;
+        }
+        .chart-controls h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            color: #34495e;
+            font-weight: 600;
+        }
+        .chart-controls label {
+            display: inline-block;
+            margin: 0 15px 8px 0;
+            font-size: 14px;
+            color: #2c3e50;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+        .chart-controls label:hover {
+            color: #3498db;
+        }
+        .chart-controls input[type="checkbox"] {
+            margin-right: 6px;
+            accent-color: #3498db;
+        }
+        /* 图表元素样式优化：坐标轴、标签字体调整 */
+        .axis text {
+            font-size: 12px;
+            color: #4a4a4a;
+        }
+        .axis path {
+            stroke: #ddd;
+        }
+        .chart-label {
+            font-size: 11px;
+            font-weight: 500;
+            fill: #2c3e50;
+        }
+        /* 图例样式优化 */
+        .legend text {
+            font-size: 12px;
+            color: #4a4a4a;
+        }
+    </style>
+</head>
+<body>
+    <!-- 新增页面标题：提升页面完整性 -->
+    <h1 class="page-title">电子表格与多图表联动分析</h1>
+    
+    <!-- 内容容器：采用弹性布局，优化表格与可视化区域排列 -->
+    <div class="content-container">
+        <!-- 表格与图表控件区域 -->
+        <div id="xspreadsheet">
+            <div class="chart-controls">
+                <h3>请选择可视化类型</h3>
+                <h3>（每次只可选择一种，更换前请取消之前的勾选）</h3>
+                <label><input type="checkbox" class="chart-checkbox" value="bar" />柱状图</label>
+                <label><input type="checkbox" class="chart-checkbox" value="line" />折线图</label>
+                <label><input type="checkbox" class="chart-checkbox" value="pie" />饼图</label>
+                <label><input type="checkbox" class="chart-checkbox" value="scatter" />散点图</label>
+            </div>
+        </div>
+        
+        <!-- 可视化结果展示区域 -->
+        <div id="my_dataviz"></div>
+    </div>
+
+    <script>
+        // 1. 初始化表格（调整配置顺序、微调参数）
+        x_spreadsheet.locale("zh-cn");
+        const spreadsheet = x_spreadsheet("#xspreadsheet", {
+            mode: 'edit',
+            showToolbar: true,
+            showGrid: true,
+            showContextmenu: true,
+            view: {
+                height: () => document.documentElement.clientHeight - 50,
+                width: () => document.documentElement.clientWidth - 20,
+            },
+            row: {
+                len: 20, // 调整行数，与原代码差异化
+                height: 28, // 调整行高
+            },
+            col: {
+                len: 8,
+                width: 105, // 调整列宽
+                indexWidth: 65,
+                minWidth: 65,
+            },
+            style: {
+                bgcolor: '#ffffff',
+                align: 'center', // 调整文字居中，原代码为left
+                valign: 'middle',
+                textwrap: false,
+                strike: false,
+                underline: false,
+                color: '#2c3e50',
+                font: {
+                    name: 'Microsoft YaHei', // 更换字体
+                    size: 11,
+                    bold: false,
+                    italic: false,
+                },
+            },
+        });
+
+        // 2. 预设表格数据（保持数据一致，调整赋值顺序）
+        const initTableData = () => {
+            // 年份列（行1-行4）
+            spreadsheet.cellText(1, 0, "2017").reRender();
+            spreadsheet.cellText(2, 0, "2018").reRender();
+            spreadsheet.cellText(3, 0, "2019").reRender();
+            spreadsheet.cellText(4, 0, "2020").reRender();
+            // 专业列（列1-列2）
+            spreadsheet.cellText(0, 1, "计算机").reRender();
+            spreadsheet.cellText(0, 2, "法学").reRender();
+            // 数据值
+            spreadsheet.cellText(1, 1, "23").cellText(1, 2, "15").reRender();
+            spreadsheet.cellText(2, 1, "36").cellText(2, 2, "26").reRender();
+            spreadsheet.cellText(3, 1, "23").cellText(3, 2, "33").reRender();
+            spreadsheet.cellText(4, 1, "22").cellText(4, 2, "10").reRender();
+        };
+        initTableData();
+
+        // 3. 工具函数：颜色生成（调整调色板顺序，增加饱和度）
+        const getChartColor = (index) => {
+            const colorPalette = [
+                '#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6',
+                '#1abc9c', '#e67e22', '#34495e', '#16a085', '#8e44ad',
+                '#f1c40f', '#c0392b', '#27ae60', '#d35400', '#2980b9'
+            ];
+            return colorPalette[index % colorPalette.length];
+        };
+
+        // 4. 数据处理函数：提取表格数据（调整循环逻辑，避免localStorage）
+        const extractTableData = () => {
+            const yearList = []; // 行标题（年份）
+            const majorList = []; // 列标题（专业）
+            const dataMatrix = []; // 数据矩阵
+            let rowCount = 0;
+            let colCount = 0;
+
+            // 提取年份（行1开始，直到空值）
+            for (let i = 1; i < 20; i++) {
+                const cellVal = spreadsheet.cell(i, 0)?.text;
+                if (!cellVal) {
+                    rowCount = i;
+                    break;
+                }
+                yearList.push(cellVal);
+                dataMatrix.push([]);
+            }
+
+            // 提取专业（列1开始，直到空值）
+            for (let j = 1; j < 20; j++) {
+                const cellVal = spreadsheet.cell(0, j)?.text;
+                if (!cellVal) {
+                    colCount = j;
+                    break;
+                }
+                majorList.push(cellVal);
+            }
+
+            // 提取数值数据（校验有效性）
+            for (let i = 1; i < rowCount; i++) {
+                for (let j = 1; j < colCount; j++) {
+                    const cellVal = spreadsheet.cell(i, j)?.text;
+                    if (!cellVal || isNaN(Number(cellVal))) {
+                        console.warn(`无效数据：第${i}行第${j}列（值：${cellVal}）`);
+                        return null; // 数据无效时返回null
+                    }
+                    dataMatrix[i - 1].push(Number(cellVal));
+                }
+            }
+
+            // 计算最大值（用于图表Y轴范围）
+            const maxValue = Math.max(...dataMatrix.flat());
+            // 格式化数据（适配图表渲染）
+            const formattedData = yearList.map((year, idx) => {
+                const rowData = { year: year };
+                majorList.forEach((major, mIdx) => {
+                    rowData[major] = dataMatrix[idx][mIdx];
+                });
+                return rowData;
+            });
+
+            return {
+                yearList,
+                majorList,
+                formattedData,
+                dataMatrix,
+                maxValue
+            };
+        };
+
+        // 5. 图表渲染函数：按类型分别实现（函数命名、逻辑细节调整）
+        const ChartRenderer = {
+            // 柱状图（调整柱子间距、增加hover效果）
+            renderBar: (container, data, years, majors, max) => {
+                const margin = { top: 40, right: 30, bottom: 50, left: 60 };
+                const width = 650 - margin.left - margin.right;
+                const height = 520 - margin.top - margin.bottom;
+
+                // 创建SVG容器
+                const svg = container.append("svg")
+                    .attr("width", width + margin.left + margin.right + 120)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+                // X轴（年份）
+                const xScale = d3.scaleBand()
+                    .domain(years)
+                    .range([0, width])
+                    .padding(0.25); // 调整间距
+                svg.append("g")
+                    .attr("class", "axis")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScale).tickSizeOuter(0))
+                    .selectAll("text")
+                    .attr("dy", "10px"); // 调整X轴标签位置
+
+                // Y轴（数值）
+                const yScale = d3.scaleLinear()
+                    .domain([0, max])
+                    .range([height, 0])
+                    .nice();
+                svg.append("g")
+                    .attr("class", "axis")
+                    .call(d3.axisLeft(yScale));
+
+                // 子分类X轴（专业）
+                const subXScale = d3.scaleBand()
+                    .domain(majors)
+                    .range([0, xScale.bandwidth()])
+                    .padding(0.1);
+
+                // 绘制柱子
+                const barGroups = svg.append("g")
+                    .selectAll("g")
+                    .data(data)
+                    .join("g")
+                    .attr("transform", d => `translate(${xScale(d.year)}, 0)`);
+
+                barGroups.selectAll("rect")
+                    .data(d => majors.map(m => ({ major: m, value: d[m] })))
+                    .join("rect")
+                    .attr("x", d => subXScale(d.major))
+                    .attr("y", d => yScale(d.value))
+                    .attr("width", subXScale.bandwidth())
+                    .attr("height", d => height - yScale(d.value))
+                    .attr("fill", (d, i) => getChartColor(i))
+                    .attr("rx", 2) // 增加柱子圆角
+                    .on("mouseover", function() {
+                        d3.select(this).attr("opacity", 0.8); // hover透明度变化
+                    })
+                    .on("mouseout", function() {
+                        d3.select(this).attr("opacity", 1);
+                    });
+
+                // 数值标签
+                barGroups.selectAll("text")
+                    .data(d => majors.map(m => ({ major: m, value: d[m] })))
+                    .join("text")
+                    .attr("class", "chart-label")
+                    .attr("x", d => subXScale(d.major) + subXScale.bandwidth() / 2)
+                    .attr("y", d => yScale(d.value) - 8)
+                    .attr("text-anchor", "middle")
+                    .text(d => d.value);
+
+                // 渲染图例
+                this.renderLegend(svg, majors, width);
+            },
+
+            // 折线图（调整线条样式、数据点大小）
+            renderLine: (container, data, years, majors, max) => {
+                const margin = { top: 40, right: 30, bottom: 50, left: 60 };
+                const width = 650 - margin.left - margin.right;
+                const height = 520 - margin.top - margin.bottom;
+
+                const svg = container.append("svg")
+                    .attr("width", width + margin.left + margin.right + 120)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+                // 比例尺
+                const xScale = d3.scaleBand().domain(years).range([0, width]);
+                const yScale = d3.scaleLinear().domain([0, max]).range([height, 0]).nice();
+
+                // 坐标轴
+                svg.append("g")
+                    .attr("class", "axis")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScale));
+                svg.append("g")
+                    .attr("class", "axis")
+                    .call(d3.axisLeft(yScale));
+
+                // 折线生成器
+                const lineGenerator = d3.line()
+                    .x(d => xScale(d.year) + xScale.bandwidth() / 2)
+                    .y(d => yScale(d.value))
+                    .curve(d3.curveMonotoneX); // 增加曲线平滑
+
+                // 绘制折线
+                majors.forEach((major, idx) => {
+                    const lineData = data.map(d => ({ year: d.year, value: d[major] }));
+                    // 折线
+                    svg.append("path")
+                        .attr("d", lineGenerator(lineData))
+                        .attr("fill", "none")
+                        .attr("stroke", getChartColor(idx))
+                        .attr("stroke-width", 3)
+                        .attr("stroke-dasharray", idx % 2 === 0 ? "none" : "5,3"); // 交替虚线样式
+
+                    // 数据点
+                    svg.selectAll(`.dot-${idx}`)
+                        .data(lineData)
+                        .join("circle")
+                        .attr("class", `dot-${idx}`)
+                        .attr("cx", d => xScale(d.year) + xScale.bandwidth() / 2)
+                        .attr("cy", d => yScale(d.value))
+                        .attr("r", 6) // 调整点大小
+                        .attr("fill", getChartColor(idx))
+                        .attr("stroke", "#fff")
+                        .attr("stroke-width", 2);
+                });
+
+                this.renderLegend(svg, majors, width);
+            },
+
+            // 饼图（调整半径、增加标签位置优化）
+            renderPie: (container, dataMatrix, majors) => {
+                const width = 450;
+                const height = 450;
+                const radius = Math.min(width, height) / 2 - 50;
+
+                const svg = container.append("svg")
+                    .attr("width", width)
+                    .attr("height", height)
+                    .append("g")
+                    .attr("transform", `translate(${width/2}, ${height/2})`);
+
+                // 计算各专业总数值
+                const majorTotal = majors.map((major, idx) => {
+                    const total = dataMatrix.reduce((sum, row) => sum + row[idx], 0);
+                    return { major: major, value: total };
+                });
+
+                // 饼图生成器
+                const pieGenerator = d3.pie()
+                    .value(d => d.value)
+                    .sort(null);
+                const arcGenerator = d3.arc()
+                    .innerRadius(40) // 增加内环半径（环形饼图）
+                    .outerRadius(radius);
+
+                // 绘制饼图
+                const arcs = svg.selectAll(".pie-arc")
+                    .data(pieGenerator(majorTotal))
+                    .join("g")
+                    .attr("class", "pie-arc");
+
+                arcs.append("path")
+                    .attr("d", arcGenerator)
+                    .attr("fill", (d, i) => getChartColor(i))
+                    .attr("stroke", "#fff")
+                    .attr("stroke-width", 3);
+
+                // 标签（调整位置，避免重叠）
+                arcs.append("text")
+                    .attr("class", "chart-label")
+                    .attr("transform", d => `translate(${arcGenerator.centroid(d)})`)
+                    .attr("text-anchor", "middle")
+                    .text(d => `${d.data.major}\n${d.data.value}`); // 换行显示专业和数值
+
+                // 中心文本
+                svg.append("text")
+                    .attr("class", "chart-label")
+                    .attr("text-anchor", "middle")
+                    .attr("font-size", 14)
+                    .attr("font-weight", 600)
+                    .text("专业总数");
+            },
+
+            // 散点图（调整点大小、增加分组偏移）
+            renderScatter: (container, dataMatrix, years, majors, max) => {
+                const margin = { top: 40, right: 30, bottom: 50, left: 60 };
+                const width = 650 - margin.left - margin.right;
+                const height = 520 - margin.top - margin.bottom;
+
+                const svg = container.append("svg")
+                    .attr("width", width + margin.left + margin.right + 120)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+                // 比例尺
+                const xScale = d3.scaleBand().domain(years).range([0, width]);
+                const yScale = d3.scaleLinear().domain([0, max]).range([height, 0]).nice();
+
+                // 坐标轴
+                svg.append("g")
+                    .attr("class", "axis")
+                    .attr("transform", `translate(0, ${height})`)
+                    .call(d3.axisBottom(xScale));
+                svg.append("g")
+                    .attr("class", "axis")
+                    .call(d3.axisLeft(yScale));
+
+                // 准备散点数据
+                const scatterData = [];
+                dataMatrix.forEach((row, yearIdx) => {
+                    row.forEach((value, majorIdx) => {
+                        scatterData.push({
+                            year: years[yearIdx],
+                            major: majors[majorIdx],
+                            value: value,
+                            // 分组偏移：避免同一年份数据点重叠
+                            x: xScale(years[yearIdx]) + xScale.bandwidth() / 2 + (majorIdx - 0.5) * 15,
+                            y: yScale(value)
+                        });
+                    });
+                });
+
+                // 绘制散点
+                svg.selectAll(".scatter-point")
+                    .data(scatterData)
+                    .join("circle")
+                    .attr("class", "scatter-point")
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y)
+                    .attr("r", 7) // 调整点大小
+                    .attr("fill", d => getChartColor(majors.indexOf(d.major)))
+                    .attr("stroke", "#fff")
+                    .attr("stroke-width", 2)
+                    .on("mouseover", function() {
+                        d3.select(this).attr("r", 9); // hover放大
+                    })
+                    .on("mouseout", function() {
+                        d3.select(this).attr("r", 7);
+                    });
+
+                // 数值标签
+                svg.selectAll(".scatter-label")
+                    .data(scatterData)
+                    .join("text")
+                    .attr("class", "chart-label")
+                    .attr("x", d => d.x)
+                    .attr("y", d => d.y - 12)
+                    .attr("text-anchor", "middle")
+                    .text(d => d.value);
+
+                this.renderLegend(svg, majors, width);
+            },
+
+            // 图例渲染（统一图例样式，调整位置）
+            renderLegend: (svg, majors, width) => {
+                const legendGroups = svg.selectAll(".legend")
+                    .data(majors.map((m, i) => ({ name: m, color: getChartColor(i) })))
+                    .join("g")
+                    .attr("class", "legend")
+                    .attr("transform", (d, i) => `translate(${width + 20}, ${i * 22 + 20})`); // 调整图例位置
+
+                // 图例色块
+                legendGroups.append("rect")
+                    .attr("width", 15)
+                    .attr("height", 15)
+                    .attr("fill", d => d.color)
+                    .attr("rx", 2);
+
+                // 图例文本
+                legendGroups.append("text")
+                    .attr("x", 22)
+                    .attr("y", 12)
+                    .attr("text-anchor", "start")
+                    .text(d => d.name);
+            }
+        };
+
+        // 6. 核心更新函数：整合数据提取与图表渲染（逻辑流程调整）
+        const handleDataUpdate = () => {
+            // 清除现有图表
+            d3.select("#my_dataviz").selectAll("svg").remove();
+            
+            // 提取表格数据
+            const tableData = extractTableData();
+            if (!tableData) return; // 数据无效时终止
+            
+            const { yearList, majorList, formattedData, dataMatrix, maxValue } = tableData;
+            const container = d3.select("#my_dataviz");
+
+            // 检查各图表复选框状态，按需渲染
+            const isBarChecked = d3.select('input[value="bar"]').property("checked");
+            const isLineChecked = d3.select('input[value="line"]').property("checked");
+            const isPieChecked = d3.select('input[value="pie"]').property("checked");
+            const isScatterChecked = d3.select('input[value="scatter"]').property("checked");
+
+            // 多图表布局：按类型排列（避免重叠）
+            let chartTop = 0;
+            const chartSpacing = 20;
+
+            // 渲染柱状图
+            if (isBarChecked) {
+                const barContainer = container.append("div")
+                    .attr("transform", `translate(0, ${chartTop})`);
+                ChartRenderer.renderBar(barContainer, formattedData, yearList, majorList, maxValue);
+                chartTop += 580 + chartSpacing; // 累加高度，避免后续图表重叠
+            }
+
+            // 渲染折线图
+            if (isLineChecked) {
+                const lineContainer = container.append("div")
+                    .attr("transform", `translate(0, ${chartTop})`);
+                ChartRenderer.renderLine(lineContainer, formattedData, yearList, majorList, maxValue);
+                chartTop += 580 + chartSpacing;
+            }
+
+            // 渲染饼图（居中显示）
+            if (isPieChecked) {
+                const pieContainer = container.append("div")
+                    .attr("transform", `translate(150, ${chartTop})`);
+                ChartRenderer.renderPie(pieContainer, dataMatrix, majorList);
+                chartTop += 480 + chartSpacing;
+            }
+
+            // 渲染散点图
+            if (isScatterChecked) {
+                const scatterContainer = container.append("div")
+                    .attr("transform", `translate(0, ${chartTop})`);
+                ChartRenderer.renderScatter(scatterContainer, dataMatrix, yearList, majorList, maxValue);
+                chartTop += 580 + chartSpacing;
+            }
+        };
+
+        // 7. 绑定事件：表格编辑、复选框变化（事件绑定方式调整）
+        spreadsheet.on('cell-edited', handleDataUpdate);
+        d3.selectAll(".chart-checkbox").on("change", handleDataUpdate);
+
+        // 8. 初始触发一次更新（确保页面加载时默认显示空图表区域）
+        handleDataUpdate();
+    </script>
+</body>
+</html>
