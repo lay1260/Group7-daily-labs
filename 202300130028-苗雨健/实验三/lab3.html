@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电子表格实践I - x-spreadsheet与D3可视化</title>
+    <!-- 导入需要的官方库 -->
+    <link rel="stylesheet" href="https://unpkg.com/x-data-spreadsheet@1.1.5/dist/xspreadsheet.css" />
+    <script src="https://unpkg.com/x-data-spreadsheet@1.1.5/dist/xspreadsheet.js"></script>
+    <script src="https://unpkg.com/x-data-spreadsheet@1.1.9/dist/locale/zh-cn.js"></script>
+    <script src="https://d3js.org/d3.v6.js"></script>
+</head>
+<body>
+    <!-- 加入多个check box可以选择不同的可视化类型 -->
+    <div id="xspreadsheet">
+        <div class="chart-controls">
+            <h3>可视化选项：</h3>
+            <label><input type="checkbox" class="checkbox" value="barchart" />柱状图</label>
+            <label><input type="checkbox" class="checkbox" value="linechart" />折线图</label>
+            <label><input type="checkbox" class="checkbox" value="piechart" />饼图</label>
+            <label><input type="checkbox" class="checkbox" value="scatterchart" />散点图</label>
+        </div>
+    </div>
+    <div id="my_dataviz"></div>
+    
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            margin: 0;
+        }
+        
+        #xspreadsheet {
+            width: 400px;
+            height: 500px;
+            padding: 0px;
+            margin: 0px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+        
+        #my_dataviz {
+            width: 1000px;
+            height: 900px;
+            padding: 20px;
+            margin: 20px 0;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .ticktext {
+            font-size: 20;
+            stroke: rgba(0, 0, 0, 0.794);
+            stroke-width: 0.05em;
+        }
+        
+        .chart-controls {
+            margin-bottom: 20px;
+            padding: 20px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            color: #ffffff;
+        }
+        
+        .chart-controls h3 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .chart-controls label {
+            display: block;
+            margin: 10px 0;
+            font-size: 15px;
+            cursor: pointer;
+            color: #ffffff;
+            transition: all 0.3s ease;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        
+        .chart-controls label:hover {
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateX(5px);
+        }
+        
+        .chart-controls input[type="checkbox"] {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #ffffff;
+        }
+        
+        .chart-controls input[type="checkbox"]:checked {
+            filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.8));
+        }
+    </style>
+
+    <script>
+        // 设置中文语言环境
+        x_spreadsheet.locale("zh-cn");
+        
+        // 初始化表格
+        var xs = x_spreadsheet("#xspreadsheet", {
+            mode: 'edit', // edit | read
+            showToolbar: true,
+            showGrid: true,
+            showContextmenu: true,
+            view: {
+                height: () => document.documentElement.clientHeight,
+                width: () => document.documentElement.clientWidth,
+            },
+            row: {
+                len: 15,
+                height: 25,
+            },
+            col: {
+                len: 8,
+                width: 100,
+                indexWidth: 60,
+                minWidth: 60,
+            },
+            style: {
+                bgcolor: '#ffffff',
+                align: 'left',
+                valign: 'middle',
+                textwrap: false,
+                strike: false,
+                underline: false,
+                color: '#0a0a0a',
+                font: {
+                    name: 'Helvetica',
+                    size: 10,
+                    bold: false,
+                    italic: false,
+                },
+            },
+        });
+
+        // 设置初值
+        xs.on('cell-edited', update);
+        xs.cellText(0, 1, "计算机").cellText(0, 2, "法学").reRender();
+        xs.cellText(1, 0, "2017")
+          .cellText(1, 1, "23")
+          .cellText(1, 2, "15")
+          .reRender();
+        xs.cellText(2, 0, "2018")
+          .cellText(2, 1, "36")
+          .cellText(2, 2, "26")
+          .reRender();
+        xs.cellText(3, 0, "2019")
+          .cellText(3, 1, "23")
+          .cellText(3, 2, "33")
+          .reRender();
+        xs.cellText(4, 0, "2020")
+          .cellText(4, 1, "22")
+          .cellText(4, 2, "10")
+          .reRender();
+
+        // 颜色调色板函数
+        function getColor(idx) {
+            var palette = [
+                '#5ab1ef', '#ffb980', '#d87a80', '#2ec7c9', '#b6a2de',
+                '#8d98b3', '#e5cf0d', '#97b552', '#95706d', '#dc69aa',
+                '#07a2a4', '#9a7fd1', '#588dd5', '#f5994e', '#c05050',
+                '#59678c', '#c9ab00', '#7eb00a', '#6f5553', '#c14089'
+            ];
+            return palette[idx % palette.length];
+        }
+
+        // 定义更新函数update，在该函数中，首先确认是否需要可视化，若需要可视化则收集表格数据并存储与网页的全局变量当中，并且用d3进行可视化
+        function update() {
+            // 获取所有复选框状态
+            const barCheckbox = d3.select('input[value="barchart"]');
+            const lineCheckbox = d3.select('input[value="linechart"]');
+            const pieCheckbox = d3.select('input[value="piechart"]');
+            const scatterCheckbox = d3.select('input[value="scatterchart"]');
+            
+            const hasAnyChart = barCheckbox.property("checked") || 
+                               lineCheckbox.property("checked") || 
+                               pieCheckbox.property("checked") || 
+                               scatterCheckbox.property("checked");
+            
+            if (hasAnyChart) {
+                var data = [];
+                var ytitle = [];
+                var xtitle = [];
+                var col = 0;
+
+                for (var i = 1; i < 20; i++) {
+                    if (xs.cell(i, 0) === null || xs.cell(i, 0).text === undefined || xs.cell(i, 0).text === "") {
+                        rows = i;
+                        break;
+                    }
+                    data.push([]);
+                    ytitle.push(xs.cell(i, 0).text);
+                }
+
+                for (var i = 1; i < 20; i++) {
+                    if (xs.cell(0, i) === null || xs.cell(0, i).text === undefined || xs.cell(0, i).text === "") {
+                        col = i;
+                        break;
+                    }
+                    xtitle.push(xs.cell(0, i).text);
+                }
+
+                for (var i = 1; i < rows; i++) {
+                    for (var j = 1; j < col; j++) {
+                        if (xs.cell(i, j) === null || xs.cell(i, j).text === undefined || isNaN(+xs.cell(i, j).text)) {
+                            console.log(i, j, xs.cell(i, j));
+                            // alert("error data format");
+                            return;
+                        } else {
+                            data[i - 1][j - 1] = +xs.cell(i, j).text;
+                        }
+                    }
+                }
+
+                window.localStorage.data = data;
+                window.localStorage.xTitle = xtitle;
+                window.localStorage.yTitle = ytitle;
+                console.log(window.localStorage.data);
+
+                var xTitle = Array.from(window.localStorage.xTitle.split(","));
+                var yTitle = Array.from(window.localStorage.yTitle.split(","));
+                var list_data = window.localStorage.data.split(",");
+                var pos = 0;
+
+                var data1 = [];
+                for (var i = 0; i < yTitle.length; i++) {
+                    let tmp = [];
+                    for (var j = 0; j < xTitle.length; ++j) {
+                        tmp.push(+list_data[pos++]);
+                    }
+                    data1.push(tmp);
+                }
+
+                var max = 0;
+                var data = [];
+                for (var i = 0; i < yTitle.length; i++) {
+                    var jsd = {};
+                    jsd["group"] = yTitle[i];
+                    data.push(jsd);
+                }
+
+                for (var i = 0; i < yTitle.length; i++) {
+                    for (var j = 0; j < xTitle.length; j++) {
+                        if (data1[i][j] > max)
+                            max = data1[i][j];
+                        data[i][xTitle[j]] = data1[i][j];
+                    }
+                }
+
+                console.log(data);
+                console.log(max);
+
+                // 清除现有图表
+                d3.selectAll('svg').remove();
+
+                // 创建主容器
+                const container = d3.select("#my_dataviz");
+
+                // 绘制柱状图
+                if (barCheckbox.property("checked")) {
+                    drawBarChart(container, data, xTitle, yTitle, max);
+                }
+
+                // 绘制折线图
+                if (lineCheckbox.property("checked")) {
+                    drawLineChart(container, data, xTitle, yTitle, max);
+                }
+
+                // 绘制饼图
+                if (pieCheckbox.property("checked")) {
+                    drawPieChart(container, data1, xTitle);
+                }
+
+                // 绘制散点图
+                if (scatterCheckbox.property("checked")) {
+                    drawScatterChart(container, data1, xTitle, yTitle, max);
+                }
+            } else {
+                d3.selectAll('svg').remove();
+            }
+        }
+
+        // 柱状图绘制函数
+        function drawBarChart(container, data, xTitle, yTitle, max) {
+            const margin = { top: 40, right: 30, bottom: 40, left: 50 };
+            const width = 600 - margin.left - margin.right;
+            const height = 500 - margin.top - margin.bottom;
+
+            const svg = container
+                .append("svg")
+                .attr("width", width + margin.left + margin.right + 100)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            const subgroups = xTitle;
+            const groups = yTitle;
+
+            const x = d3.scaleBand().domain(groups).range([0, width]).padding([0.2]);
+            svg
+                .append("g")
+                .attr("transform", `translate(0, ${height})`)
+                .call(d3.axisBottom(x).tickSizeOuter(0));
+
+            const y = d3.scaleLinear().domain([0, max]).range([height, 0]).nice();
+            svg.append("g").call(d3.axisLeft(y));
+
+            const xSubgroup = d3
+                .scaleBand()
+                .domain(subgroups)
+                .range([0, x.bandwidth()])
+                .padding([0.05]);
+
+            svg
+                .append("g")
+                .selectAll("g")
+                .data(data)
+                .join("g")
+                .attr("class", "bar")
+                .attr("transform", (d) => `translate(${x(d.group)}, 0)`)
+                .selectAll("rect")
+                .data(function (d) {
+                    return subgroups.map(function (key) {
+                        return { key: key, value: d[key] };
+                    });
+                })
+                .join("rect")
+                .attr("x", (d) => xSubgroup(d.key))
+                .attr("y", (d) => y(d.value))
+                .attr("width", xSubgroup.bandwidth())
+                .attr("height", (d) => height - y(d.value))
+                .attr("fill", function(d, i) { return getColor(i); });
+
+            // 数值标签
+            svg
+                .append("g")
+                .selectAll("g")
+                .data(data)
+                .join("g")
+                .attr("class", "bar")
+                .attr("transform", (d) => `translate(${x(d.group)}, 0)`)
+                .selectAll("text")
+                .data(function (d) {
+                    return subgroups.map(function (key) {
+                        return { key: key, value: d[key] };
+                    });
+                })
+                .join("text")
+                .attr("x", (d) => xSubgroup(d.key) + xSubgroup.bandwidth() * 0.5)
+                .attr("y", (d) => y(d.value) - 10)
+                .text(d => d.value)
+                .attr('text-anchor', 'middle');
+
+            // 图例
+            drawLegend(svg, xTitle, width);
+        }
+
+        // 折线图绘制函数
+        function drawLineChart(container, data, xTitle, yTitle, max) {
+            const margin = { top: 40, right: 30, bottom: 40, left: 50 };
+            const width = 600 - margin.left - margin.right;
+            const height = 500 - margin.top - margin.bottom;
+
+            const svg = container
+                .append("svg")
+                .attr("width", width + margin.left + margin.right + 100)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            const x = d3.scaleBand().domain(yTitle).range([0, width]);
+            const y = d3.scaleLinear().domain([0, max]).range([height, 0]).nice();
+
+            svg
+                .append("g")
+                .attr("transform", `translate(0, ${height})`)
+                .call(d3.axisBottom(x));
+
+            svg.append("g").call(d3.axisLeft(y));
+
+            // 生成折线数据
+            const lineData = xTitle.map((category, idx) => ({
+                name: category,
+                values: data.map(d => ({ year: d.group, value: d[category] }))
+            }));
+
+            const line = d3.line()
+                .x(d => x(d.year) + x.bandwidth() / 2)
+                .y(d => y(d.value));
+
+            // 绘制折线
+            svg.selectAll(".line")
+                .data(lineData)
+                .enter()
+                .append("path")
+                .attr("class", "line")
+                .attr("d", d => line(d.values))
+                .attr("fill", "none")
+                .attr("stroke", (d, i) => getColor(i))
+                .attr("stroke-width", 3);
+
+            // 绘制数据点
+            svg.selectAll(".dot")
+                .data(lineData)
+                .enter()
+                .selectAll("circle")
+                .data(d => d.values)
+                .enter()
+                .append("circle")
+                .attr("class", "dot")
+                .attr("cx", d => x(d.year) + x.bandwidth() / 2)
+                .attr("cy", d => y(d.value))
+                .attr("r", 5)
+                .attr("fill", (d, i, nodes) => getColor(nodes[i].parentNode.__data__.name === xTitle[0] ? 0 : 1));
+
+            drawLegend(svg, xTitle, width);
+        }
+
+        // 饼图绘制函数
+        function drawPieChart(container, data1, xTitle) {
+            const width = 400;
+            const height = 400;
+            const radius = Math.min(width, height) / 2 - 40;
+
+            const svg = container
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+                .append("g")
+                .attr("transform", `translate(${width/2}, ${height/2})`);
+
+            // 计算总和用于百分比
+            let totalSum = 0;
+            data1.forEach(row => {
+                row.forEach(value => totalSum += value);
+            });
+
+            const pieData = [];
+            xTitle.forEach((category, categoryIdx) => {
+                let categorySum = 0;
+                data1.forEach(row => {
+                    categorySum += row[categoryIdx];
+                });
+                pieData.push({
+                    name: category,
+                    value: categorySum,
+                    percentage: ((categorySum / totalSum) * 100).toFixed(1)
+                });
+            });
+
+            const pie = d3.pie()
+                .value(d => d.value)
+                .sort(null);
+
+            const arc = d3.arc()
+                .innerRadius(0)
+                .outerRadius(radius);
+
+            const arcs = svg.selectAll(".arc")
+                .data(pie(pieData))
+                .enter()
+                .append("g")
+                .attr("class", "arc");
+
+            arcs.append("path")
+                .attr("d", arc)
+                .attr("fill", (d, i) => getColor(i))
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 2);
+
+            arcs.append("text")
+                .attr("transform", d => `translate(${arc.centroid(d)})`)
+                .attr("text-anchor", "middle")
+                .style("font-size", "12px")
+                .style("font-weight", "bold")
+                .text(d => `${d.data.name}: ${d.data.percentage}%`);
+        }
+
+        // 散点图绘制函数
+        function drawScatterChart(container, data1, xTitle, yTitle, max) {
+            const margin = { top: 40, right: 30, bottom: 40, left: 50 };
+            const width = 600 - margin.left - margin.right;
+            const height = 500 - margin.top - margin.bottom;
+
+            const svg = container
+                .append("svg")
+                .attr("width", width + margin.left + margin.right + 100)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+            const x = d3.scaleBand().domain(yTitle).range([0, width]);
+            const y = d3.scaleLinear().domain([0, max]).range([height, 0]).nice();
+
+            svg
+                .append("g")
+                .attr("transform", `translate(0, ${height})`)
+                .call(d3.axisBottom(x));
+
+            svg.append("g").call(d3.axisLeft(y));
+
+            // 生成散点数据
+            const scatterData = [];
+            data1.forEach((row, rowIdx) => {
+                row.forEach((value, colIdx) => {
+                    scatterData.push({
+                        year: yTitle[rowIdx],
+                        category: xTitle[colIdx],
+                        value: value,
+                        x: x(yTitle[rowIdx]) + x.bandwidth() / 2 + (colIdx - xTitle.length/2 + 0.5) * 10,
+                        y: y(value)
+                    });
+                });
+            });
+
+            svg.selectAll(".scatter")
+                .data(scatterData)
+                .enter()
+                .append("circle")
+                .attr("class", "scatter")
+                .attr("cx", d => d.x)
+                .attr("cy", d => d.y)
+                .attr("r", 8)
+                .attr("fill", (d, i) => getColor(xTitle.indexOf(d.category)))
+                .attr("stroke", "#fff")
+                .attr("stroke-width", 2);
+
+            // 添加数值标签
+            svg.selectAll(".scatter-label")
+                .data(scatterData)
+                .enter()
+                .append("text")
+                .attr("class", "scatter-label")
+                .attr("x", d => d.x)
+                .attr("y", d => d.y - 15)
+                .attr("text-anchor", "middle")
+                .style("font-size", "10px")
+                .text(d => d.value);
+
+            drawLegend(svg, xTitle, width);
+        }
+
+        // 图例绘制函数
+        function drawLegend(svg, xTitle, width) {
+            const legendData = xTitle.map((name, idx) => ({
+                name: name,
+                color: getColor(idx)
+            }));
+
+            const legend = svg.selectAll(".legend")
+                .data(legendData)
+                .enter()
+                .append("g")
+                .attr("class", "legend")
+                .attr("transform", (d, i) => `translate(30, ${i * 20 + 120})`);
+
+            legend.append("rect")
+                .attr("x", width - 25)
+                .attr("y", 8)
+                .attr("width", 40)
+                .attr("height", 5)
+                .style("fill", d => d.color);
+
+            legend.append("text")
+                .attr("x", width + 20)
+                .attr("y", 15)
+                .style("text-anchor", "end")
+                .text(d => d.name);
+        }
+
+        // 将update函数作为事件添加到check-box与表格修改时
+        d3.selectAll(".checkbox").on("change", update);
+    </script>
+</body>
+</html>
