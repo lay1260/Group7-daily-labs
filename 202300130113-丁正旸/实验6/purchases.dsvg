@@ -1,0 +1,20 @@
+<svg width="800" height="600">
+  <!-- 轴线 -->
+  <path class="axis-domain" d="M50,50 H750 V550 H50" fill="none" stroke="#333" />
+  
+  <!-- 刻度/标签（带id属性） -->
+  <line class="axis-tick" id="tick-1" x1="100" y1="50" x2="100" y2="550" stroke="#999" />
+  <text class="axis-label" id="label-1" x="100" y="570">2021</text>
+  <line class="axis-tick" id="tick-2" x1="200" y1="50" x2="200" y2="550" stroke="#999" />
+  <text class="axis-label" id="label-2" x="200" y="570">2022</text>
+  
+  <!-- 数据符号/文本（带year属性） -->
+  <circle class="symbol" year="2021" cx="100" cy="200" r="8" fill="#4285F4" />
+  <text class="text" year="2021" x="110" y="200">采购量：100</text>
+  <circle class="symbol" year="2022" cx="200" cy="300" r="8" fill="#EA4335" />
+  <text class="text" year="2022" x="210" y="300">采购量：150</text>
+  
+  <!-- 采购链路（带id属性） -->
+  <path class="link" id="link-1" d="M100,200 L200,300" fill="none" stroke="#666" />
+  <path class="link" id="link-2" d="M200,300 L300,400" fill="none" stroke="#666" />
+</svg>
